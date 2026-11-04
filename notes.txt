@@ -1,0 +1,154 @@
+Step1:-
+Update Kind on WSL2 Ubuntu:-
+
+cd ~
+
+curl -Lo kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+
+chmod +x kind
+
+sudo install -o root -g root -m 0755 kind /usr/local/bin/kind
+
+rm kind
+
+
+Step2:-
+Check kubectl compatibility:- 
+
+cd ~
+
+curl -LO https://dl.k8s.io/release/v1.35.9/bin/linux/amd64/kubectl
+
+curl -LO https://dl.k8s.io/release/v1.35.9/bin/linux/amd64/kubectl.sha256
+
+echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+
+chmod +x kubectl
+
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+rm kubectl kubectl.sha256
+
+
+Step3:-
+
+kind create cluster \
+  --name local-lab \
+  --image kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0 \
+  --wait 120s
+
+
+
+Step4:-
+
+Next: Deploy PostgreSQL
+
+kubectl create namespace hybrid-lab
+
+mkdir -p ~/hybrid-eks-lab/postgres
+cd ~/hybrid-eks-lab/postgres
+
+vi postgres.yaml
+
+kubectl apply -f postgres.yaml
+
+Verify the below commands
+
+kubectl get pods -n hybrid-lab
+kubectl get svc -n hybrid-lab
+kubectl get pvc -n hybrid-lab
+kubectl get pv
+
+Test the database:
+
+kubectl exec -it deployment/postgres -n hybrid-lab -- \
+  psql -U paymentuser -d paymentdb -c "SELECT version();"
+
+
+next Step :- Create Flask Applications
+
+cd ~/hybrid-eks-lab
+
+mkdir -p flask-app
+cd flask-app
+
+create app.pay & requirements.txt , Dockerfile
+
+Need to create the table In PostgreSQL database
+
+kubectl exec -it deployment/postgres -n hybrid-lab -- \
+  psql -U paymentuser -d paymentdb \
+  -c "CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        amount NUMERIC(10,2) NOT NULL
+      );"
+
+Verify the database table
+
+kubectl exec -it deployment/postgres -n hybrid-lab -- \
+  psql -U paymentuser -d paymentdb -c "\dt"
+
+
+
+Build Docker image
+
+docker build -t payment-api:v1 .
+
+Load the image into Kind :-
+kind load docker-image payment-api:v1 --name local-lab
+
+kubectl apply -f flask-deployment.yaml
+
+kubectl get deployments -n hybrid-lab
+kubectl get pods -n hybrid-lab
+kubectl get svc -n hybrid-lab
+
+
+
+Test Flask connectivity
+
+kubectl port-forward -n hybrid-lab svc/payment-api 5000:5000
+
+From another terminal:-
+
+
+curl http://localhost:5000/health
+
+Insert a payment
+
+curl -X POST http://localhost:5000/payments \
+  -H "Content-Type: application/json" \
+  -d '{"amount":2500.50}'
+
+
+curl http://localhost:5000/payments
+
+
+
+Now We can start the monitoring tools setup:-
+
+prometheus:-
+
+
+helm repo add prometheus-community \
+https://prometheus-community.github.io/helm-charts
+
+helm repo update
+
+kubectl create namespace monitoring
+
+mkdir -p ~/hybrid-eks-lab/monitoring
+cd ~/hybrid-eks-lab/monitoring
+
+vi monitoring-values.yaml
+
+helm install monitoring prometheus-community/kube-prometheus-stack \
+-n monitoring \
+-f monitoring-values.yaml
+
+
+kubectl get pods -n monitoring
+kubectl get svc -n monitoring
+
+
+
