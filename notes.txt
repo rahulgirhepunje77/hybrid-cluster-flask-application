@@ -156,5 +156,21 @@ helm upgrade monitoring prometheus-community/kube-prometheus-stack \
   --set grafana.resources.requests.memory=128Mi \
   --set grafana.resources.limits.memory=512Mi
 
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout /tmp/monitoring.key \
+  -out /tmp/monitoring.crt \
+  -days 365 \
+  -subj "/CN=monitoring-kube-prometheus-operator.monitoring.svc" \
+  -addext "subjectAltName=DNS:monitoring-kube-prometheus-operator,DNS:monitoring-kube-prometheus-operator.monitoring,DNS:monitoring-kube-prometheus-operator.monitoring.svc"
+
+
+kubectl create secret generic monitoring-kube-prometheus-admission \
+  --namespace monitoring \
+  --from-file=cert=/tmp/monitoring.crt \
+  --from-file=key=/tmp/monitoring.key
+
+
+
+
 
 
