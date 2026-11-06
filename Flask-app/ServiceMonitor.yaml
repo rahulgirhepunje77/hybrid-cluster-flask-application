@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: payment-api
+  namespace: hybrid-lab
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - hybrid-lab
+  selector:
+    matchLabels:
+      app: payment-api
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
