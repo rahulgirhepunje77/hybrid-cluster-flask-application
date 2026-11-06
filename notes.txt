@@ -150,5 +150,11 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
 kubectl get pods -n monitoring
 kubectl get svc -n monitoring
 
+helm upgrade monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring \
+  --reuse-values \
+  --set grafana.resources.requests.memory=128Mi \
+  --set grafana.resources.limits.memory=512Mi
+
 
 
