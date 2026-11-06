@@ -1,7 +1,8 @@
+
 grafana:
   enabled: true
   adminUser: admin
-  adminPassword: Admin@12345
+  adminPassword: "CHANGE_TO_A_STRONG_PASSWORD"
   resources:
     requests:
       cpu: 100m
@@ -22,10 +23,11 @@ prometheus:
         cpu: 500m
         memory: 768Mi
 
-alertmanager:
-  enabled: false
-
 prometheusOperator:
+  # Workaround for the GHCR image-pull failure in your Kind lab.
+  # This disables admission webhook certificate-generation jobs.
+  admissionWebhooks:
+    enabled: false
   resources:
     requests:
       cpu: 50m
@@ -39,3 +41,6 @@ kube-state-metrics:
 
 prometheus-node-exporter:
   enabled: true
+
+alertmanager:
+  enabled: false
