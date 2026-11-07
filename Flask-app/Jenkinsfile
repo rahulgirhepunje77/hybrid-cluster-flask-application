@@ -1,0 +1,110 @@
+
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "rgirhepu/flask-app"
+        K8S_NAMESPACE = "hybrid-lab"
+        K8S_DEPLOYMENT = "flask-app"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Code Validation') {
+            steps {
+                sh '''
+                    python3 --version
+                    python3 -m compileall -q .
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "${BUILD_NUMBER}"
+                }
+
+                sh '''
+                    docker build \
+                      -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                      -t ${DOCKER_IMAGE}:latest .
+                '''
+            }
+        }
+
+        stage('Docker Login and Push') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        echo "$DOCKER_PASS" | docker login \
+                          -u "$DOCKER_USER" --password-stdin
+
+                        docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+                        docker push ${DOCKER_IMAGE}:latest
+
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to kind') {
+            steps {
+                sh '''
+                    kubectl config use-context kind-local-lab
+
+                    kubectl apply -f k8s/namespace.yaml
+                    kubectl apply -f k8s/service.yaml
+                    kubectl apply -f k8s/deployment.yaml
+
+                    kubectl set image deployment/${K8S_DEPLOYMENT} \
+                      flask-app=${DOCKER_IMAGE}:${IMAGE_TAG} \
+                      -n ${K8S_NAMESPACE}
+
+                    kubectl rollout status \
+                      deployment/${K8S_DEPLOYMENT} \
+                      -n ${K8S_NAMESPACE} \
+                      --timeout=180s
+                '''
+            }
+        }
+
+        stage('Deployment Verification') {
+            steps {
+                sh '''
+                    kubectl get pods -n ${K8S_NAMESPACE}
+                    kubectl get svc -n ${K8S_NAMESPACE}
+                    kubectl get deployment -n ${K8S_NAMESPACE}
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Flask application deployed successfully!'
+        }
+
+        failure {
+            echo 'CI/CD pipeline failed. Check Jenkins console output.'
+        }
+
+        always {
+            echo 'Pipeline execution completed.'
+        }
+    }
+}
