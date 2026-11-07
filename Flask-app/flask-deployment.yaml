@@ -18,6 +18,8 @@ spec:
         - name: payment-api
           image: payment-api:v1
           imagePullPolicy: IfNotPresent
+          imagePullSecrets:
+          - name: docker-registry-secret
           ports:
             - name: http
               containerPort: 5000
